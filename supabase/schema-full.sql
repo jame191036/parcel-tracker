@@ -10,6 +10,7 @@ create extension if not exists "pgcrypto";
 create table if not exists asset_type (
   asset_type_id uuid primary key default gen_random_uuid(),
   asset_type_name varchar not null,
+  description varchar,
   create_date timestamptz not null default now(),
   edit_date timestamptz,
   is_active boolean not null default true,
@@ -20,6 +21,7 @@ create table if not exists asset_type (
 create table if not exists company (
   company_id uuid primary key default gen_random_uuid(),
   company_name varchar not null,
+  description varchar,
   create_date timestamptz not null default now(),
   edit_date timestamptz,
   is_active boolean not null default true,
@@ -30,6 +32,18 @@ create table if not exists company (
 create table if not exists payee (
   payee_id uuid primary key default gen_random_uuid(),
   payee_name varchar not null,
+  description varchar,
+  create_date timestamptz not null default now(),
+  edit_date timestamptz,
+  is_active boolean not null default true,
+  is_delete boolean not null default false
+);
+
+-- ---------- Master: สถานะการคืนเงิน ----------
+create table if not exists return_status (
+  return_status_id uuid primary key default gen_random_uuid(),
+  return_status_name varchar not null,
+  description varchar,
   create_date timestamptz not null default now(),
   edit_date timestamptz,
   is_active boolean not null default true,
@@ -42,10 +56,12 @@ create table if not exists asset (
   asset_no varchar not null,                    -- เลขพัสดุ
   supreme_court_no varchar,                      -- เลขที่ฎีกา
   activity_name varchar not null,                 -- ชื่อโครงการ
+  description varchar,                            -- คำอธิบายเพิ่มเติม
   asset_type_id uuid references asset_type(asset_type_id),
   total_amount decimal(10,2) not null default 0,   -- ยอดเงิน
   company_id uuid references company(company_id),
   payee_id uuid references payee(payee_id),
+  return_status_id uuid references return_status(return_status_id), -- สถานะการคืนเงิน
   disbursement_date timestamptz,                  -- วันที่เบิกจ่าย
   transferred_date timestamptz,                   -- วันที่เงินโอนเข้า
   create_date timestamptz not null default now(),
@@ -56,6 +72,7 @@ create index if not exists idx_asset_asset_no on asset(asset_no);
 create index if not exists idx_asset_type on asset(asset_type_id);
 create index if not exists idx_asset_company on asset(company_id);
 create index if not exists idx_asset_payee on asset(payee_id);
+create index if not exists idx_asset_return_status on asset(return_status_id);
 
 -- ---------- View: asset พร้อมชื่อ master (สะดวกตอน SELECT จาก frontend) ----------
 create or replace view asset_view as
@@ -63,11 +80,13 @@ select
   a.*,
   t.asset_type_name,
   c.company_name,
-  p.payee_name
+  p.payee_name,
+  r.return_status_name
 from asset a
 left join asset_type t on t.asset_type_id = a.asset_type_id
 left join company c on c.company_id = a.company_id
-left join payee p on p.payee_id = a.payee_id;
+left join payee p on p.payee_id = a.payee_id
+left join return_status r on r.return_status_id = a.return_status_id;
 
 -- ---------- Trigger: อัปเดต edit_date อัตโนมัติ ----------
 create or replace function set_edit_date()
@@ -86,22 +105,34 @@ create trigger trg_company_edit_date before update on company
   for each row execute function set_edit_date();
 create trigger trg_payee_edit_date before update on payee
   for each row execute function set_edit_date();
+create trigger trg_return_status_edit_date before update on return_status
+  for each row execute function set_edit_date();
+
+-- ---------- ข้อมูลตั้งต้น: สถานะการคืนเงิน ----------
+insert into return_status (return_status_name)
+values ('เข้ากองกลาง'), ('จ่ายบริษัท');
 
 -- ==========================================================
 -- Row Level Security
--- MVP: อนุญาตให้ authenticated user ทุกคน อ่าน/เขียนได้ทุกตาราง
--- ปรับ policy ให้เข้มขึ้นภายหลังตามสิทธิ์ผู้ใช้จริง (เช่นแยก role)
+-- MVP: เปิดให้ทุกคนที่มี anon key อ่าน/เขียนได้ทุกตาราง (ไม่ต้อง login)
+-- ⚠️ คำเตือน: เหมาะกับใช้งานภายในทีมที่ไว้ใจกัน หรือ deploy หลัง VPN/intranet
+--    เท่านั้น ไม่ควรเปิดสู่อินเทอร์เน็ตสาธารณะ เพราะเป็นข้อมูลการเงิน
+--    ถ้าต้องการความปลอดภัยขึ้น ให้เพิ่มหน้า login แล้วเปลี่ยนกลับเป็น
+--    using (auth.role() = 'authenticated')
 -- ==========================================================
 alter table asset enable row level security;
 alter table asset_type enable row level security;
 alter table company enable row level security;
 alter table payee enable row level security;
+alter table return_status enable row level security;
 
-create policy "authenticated read/write asset" on asset
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "authenticated read/write asset_type" on asset_type
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "authenticated read/write company" on company
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-create policy "authenticated read/write payee" on payee
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "public read/write asset" on asset
+  for all using (true) with check (true);
+create policy "public read/write asset_type" on asset_type
+  for all using (true) with check (true);
+create policy "public read/write company" on company
+  for all using (true) with check (true);
+create policy "public read/write payee" on payee
+  for all using (true) with check (true);
+create policy "public read/write return_status" on return_status
+  for all using (true) with check (true);

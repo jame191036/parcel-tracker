@@ -63,7 +63,7 @@ export default function AssetTable() {
 
   return (
     <div className="overflow-x-auto border border-line">
-      <table className="w-full min-w-[900px] border-collapse text-sm">
+      <table className="w-full min-w-[1000px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-line bg-brandSoft/60 text-left font-mono text-xs uppercase tracking-wide text-ink/60">
             <th className="px-4 py-3">เลขพัสดุ</th>
@@ -73,8 +73,10 @@ export default function AssetTable() {
             <th className="px-4 py-3 text-right">ยอดเงิน</th>
             <th className="px-4 py-3">บริษัท</th>
             <th className="px-4 py-3">เบิกให้</th>
+            <th className="px-4 py-3">สถานะคืนเงิน</th>
             <th className="px-4 py-3">วันที่เบิก</th>
             <th className="px-4 py-3">วันที่โอน</th>
+            <th className="px-4 py-3">จัดการ</th>
           </tr>
         </thead>
         <tbody>
@@ -91,6 +93,7 @@ export default function AssetTable() {
               </td>
               <td className="px-4 py-3 text-ink/70">{row.company_name ?? "—"}</td>
               <td className="px-4 py-3 text-ink/70">{row.payee_name ?? "—"}</td>
+              <td className="px-4 py-3 text-ink/70">{row.return_status_name ?? "—"}</td>
               <td className="px-4 py-3 font-mono text-ink/70">
                 {formatDate(row.disbursement_date)}
               </td>
@@ -100,6 +103,11 @@ export default function AssetTable() {
                 ) : (
                   <span className="text-warn">ยังไม่โอน</span>
                 )}
+              </td>
+              <td className="px-4 py-3">
+                <a href={`/edit/${row.asset_id}`} className="font-mono text-xs text-brand hover:underline">
+                  แก้ไข
+                </a>
               </td>
             </tr>
           ))}
