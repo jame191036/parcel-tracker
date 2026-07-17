@@ -58,7 +58,11 @@ supabase/
 
 View `asset_view` = `asset` join ชื่อจาก master ทั้ง 4 ตัว (asset_type_name, company_name, payee_name, return_status_name) — frontend SELECT จาก view นี้เสมอ ไม่ query ตาราง asset ตรงๆ
 
-**RLS: เปิด public เต็ม (`using (true) with check (true)`) ทุกตาราง โดยตั้งใจ** — โปรเจกต์นี้ยังไม่มีระบบ login ใช้งานภายในทีมที่ไว้ใจกันเท่านั้น **อย่าเปลี่ยนกลับเป็น `auth.role() = 'authenticated'` เอง** ถ้าจะเพิ่ม auth ต้องคุยกับ user ก่อนเพราะกระทบทั้งแอป
+**RLS: เฉพาะผู้ล็อกอิน (`auth.role() = 'authenticated'`) ทุกตาราง** — มีระบบ login แล้ว (Supabase Auth email/password) เพื่อให้ deploy ขึ้น public ได้ปลอดภัย
+- migration: `supabase/auth-rls-policy.sql` (public → authenticated), ย้อนกลับ public ได้ด้วย `supabase/open-rls-policy.sql`
+- ต้องเปิด Email provider + สร้าง user ใน Supabase Dashboard (Authentication > Users) เอง — แอปไม่มีหน้า signup (internal tool, admin provision ให้)
+- **auth flow**: `src/middleware.ts` (ต้องอยู่ใน `src/` เพราะโปรเจกต์ใช้ src directory) เรียก `updateSession()` จาก `src/lib/supabase/middleware.ts` — รีเฟรช session + เด้ง unauthenticated ไป `/login`, เด้งคน login แล้วออกจาก `/login`. หน้า login = `src/app/login/page.tsx`, header+ปุ่ม logout = `src/components/AppHeader.tsx` (ซ่อนตัวเองบน `/login`)
+- component ที่ query ข้อมูลไม่ต้องแก้ — browser client (`@supabase/ssr`) แนบ session อัตโนมัติหลัง login
 
 **Soft delete convention**: ตาราง master ไม่ hard delete — ใช้ `is_delete = true` (ซ่อนจากลิสต์) และ `is_active` (toggle เปิด/ปิดใช้งาน, กรองใน dropdown ตอนเพิ่ม/แก้ไข asset ด้วย `.eq("is_active", true)`) เหตุผล: กัน foreign key เพี้ยนถ้ามี asset เก่าอ้างอิง id อยู่
 
@@ -71,6 +75,7 @@ View `asset_view` = `asset` join ชื่อจาก master ทั้ง 4 ต
 5. **⚠️ อย่าอัป `@supabase/supabase-js` เกิน 2.45.x (pin ไว้ที่ `2.45.4` เป๊ะ)**: `@supabase/ssr@0.5.2` คืน type `SupabaseClient<Database, SchemaName, Schema>` (generic order แบบเก่า) แต่ supabase-js ตั้งแต่ ~2.7x ขึ้นไปเปลี่ยนลำดับ generic ของ `SupabaseClient` (arg 2 กลายเป็น `SchemaNameOrClientOptions` และ fallback เป็น `never` แทน `any`) → ssr ส่ง schema object ไปผิดช่อง ทำให้ **type ทุก query กลายเป็น `never`** (insert/update/eq error หมด) และ build ล้ม นอกจากนี้ 2.110+ ยัง require node 22 (โปรเจกต์ใช้ node 20). วิธีแก้: pin supabase-js ไว้คู่กับ ssr 0.5.2. ถ้าจะอัป supabase-js เป็นเวอร์ชันใหม่จริงๆ ต้องอัป `@supabase/ssr` เป็นเวอร์ชันที่คู่กัน (0.6/0.7+) พร้อมกัน
 6. **`database.types.ts` ต้องครบ shape ที่ postgrest-js คาดหวัง**: แต่ละตารางต้องมี `Row/Insert/Update/Relationships` + top-level ต้องมี `Functions/Enums/CompositeTypes` ไม่งั้น `Database["public"]` ไม่ผ่าน `extends GenericSchema` แล้ว fallback เป็น `never`
 7. **MasterDataManager query แบบ dynamic**: component นี้ทำงานกับ 4 master table แบบ generic (ชื่อตาราง/คอลัมน์เป็นตัวแปร) ซึ่ง type generic ตรวจ union ไม่ได้ จึง cast client เป็น `SupabaseClient` (ไม่ผูก schema) เฉพาะไฟล์นั้น — ถ้าเพิ่ม field ใหม่ในตาราง master จะไม่มี type ช่วยเช็ก ต้องระวังเอง
+8. **middleware ต้องอยู่ที่ `src/middleware.ts`**: โปรเจกต์ใช้ src directory ดังนั้น Next.js จะมองหา middleware ใน `src/` เท่านั้น — ถ้าวางที่ root (`./middleware.ts`) จะไม่ทำงานเงียบๆ (ไม่ error แต่ auth ไม่คุ้มครองเลย ทุกหน้าเปิดโล่ง)
 
 ## Convention การเขียนโค้ด
 
@@ -84,12 +89,19 @@ View `asset_view` = `asset` join ชื่อจาก master ทั้ง 4 ต
 ## สิ่งที่ทำเสร็จแล้ว
 
 - ✅ ดูรายการ (`/`), เพิ่มรายการ (`/new`), แก้ไข/ลบรายการ (`/edit/[id]`)
-- ✅ RLS เปิด public (ไม่ต้อง login)
+- ✅ **Login (Supabase Auth) + RLS แบบ authenticated** — หน้า `/login`, middleware คุมสิทธิ์, ปุ่ม logout ใน header (พร้อม deploy ขึ้น public)
 - ✅ ตาราง `return_status` + คอลัมน์ `description` ทุกตาราง
 - ✅ หน้าจัดการ master data (`/master`) — CRUD ครบ 4 ตาราง พร้อม soft delete
 - ✅ **Filter/Search** — กรองใน `AssetTable.tsx` แบบ client-side (`useMemo`) บนข้อมูลที่โหลดมาแล้ว: ค้นหาข้อความ (เลขพัสดุ/เลขฎีกา/ชื่อโครงการ), ประเภท/บริษัท/เบิกให้/สถานะคืนเงิน (dropdown ดึงจากค่าที่มีจริงในรายการ), สถานะโอนเงิน, ช่วงวันที่เบิก + สรุปจำนวน/ยอดรวมตามผลกรอง
 - ✅ **Export Excel/PDF** — `src/lib/export.ts` (ไม่พึ่งไลบรารีภายนอก): Excel = CSV แบบ UTF-8 BOM, PDF = เปิดหน้าต่างพิมพ์ของ browser แล้วบันทึกเป็น PDF (เลี่ยงปัญหาฝังฟอนต์ไทยใน jsPDF) — ปุ่มอยู่ในแถบกรอง export เฉพาะรายการที่กรองอยู่
 
+## Deploy (Vercel)
+
+พร้อม deploy: `npm run build` ผ่าน, `.env.local` ไม่ถูก commit (ดู `.env.local.example`)
+1. push ขึ้น Git → import เข้า Vercel (detect Next.js อัตโนมัติ)
+2. ตั้ง env ใน Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+3. **ก่อน/หลัง deploy: รัน `supabase/auth-rls-policy.sql` + เปิด Email auth + สร้าง user** (ไม่งั้นเข้าใช้ไม่ได้ หรือถ้ายังเป็น RLS public จะเปิดข้อมูลการเงินสู่สาธารณะ)
+
 ## สิ่งที่ยังไม่ได้ทำ (ทำต่อได้เลย)
 
-- ⬜ **หน้า Login** — เผื่ออนาคตอยากเปิดกว้างขึ้นแล้วต้องการความปลอดภัยเพิ่ม (ตอนนี้ตั้งใจไม่มี ดู RLS convention ด้านบน)
+- ⬜ (ยังไม่มีงานค้างหลัก — filter/search, export, master data, auth เสร็จหมดแล้ว)

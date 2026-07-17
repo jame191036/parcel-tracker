@@ -25,7 +25,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Download, FileText, Pencil, Search, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { Download, FileText, Pencil, Search, Trash2, X } from "lucide-react";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -49,8 +58,12 @@ const emptyFilters = {
   payee_id: "",
   return_status_id: "",
   transfer: "", // "" | "done" | "pending"
-  date_from: "",
+  date_from: "", // วันที่เบิก
   date_to: "",
+  transferred_from: "", // วันที่โอน
+  transferred_to: "",
+  amount_min: "", // ยอดเงิน (บาท)
+  amount_max: "",
 };
 
 type Option = { id: string; name: string };
@@ -115,6 +128,9 @@ export default function AssetTable() {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState(emptyFilters);
 
+  const [deleteTarget, setDeleteTarget] = useState<AssetView | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     const supabase = createClient();
     supabase
@@ -127,6 +143,27 @@ export default function AssetTable() {
         setLoading(false);
       });
   }, []);
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("asset")
+      .delete()
+      .eq("asset_id", deleteTarget.asset_id);
+    setDeleting(false);
+
+    if (error) {
+      setDeleteTarget(null);
+      toast.error(`ลบไม่สำเร็จ: ${error.message}`);
+      return;
+    }
+    // เอาแถวที่ลบออกจาก state ทันที ไม่ต้องโหลดใหม่
+    setRows((prev) => prev.filter((r) => r.asset_id !== deleteTarget.asset_id));
+    toast.success(`ลบรายการ "${deleteTarget.asset_no}" แล้ว`);
+    setDeleteTarget(null);
+  }
 
   function updateFilter<K extends keyof typeof filters>(key: K, value: string) {
     setFilters((f) => ({ ...f, [key]: value }));
@@ -160,6 +197,20 @@ export default function AssetTable() {
         return false;
       if (filters.date_to && (!row.disbursement_date || row.disbursement_date > filters.date_to))
         return false;
+      // ช่วงวันที่โอน — แถวที่ยังไม่โอน (null) จะถูกตัดออกเมื่อกำหนดช่วง
+      if (
+        filters.transferred_from &&
+        (!row.transferred_date || row.transferred_date < filters.transferred_from)
+      )
+        return false;
+      if (
+        filters.transferred_to &&
+        (!row.transferred_date || row.transferred_date > filters.transferred_to)
+      )
+        return false;
+      // ช่วงยอดเงิน
+      if (filters.amount_min && (row.total_amount ?? 0) < Number(filters.amount_min)) return false;
+      if (filters.amount_max && (row.total_amount ?? 0) > Number(filters.amount_max)) return false;
       return true;
     });
   }, [rows, filters]);
@@ -188,6 +239,10 @@ export default function AssetTable() {
     if (filters.transfer === "pending") parts.push("สถานะโอน: ยังไม่โอน");
     if (filters.date_from) parts.push(`เบิกตั้งแต่ ${filters.date_from}`);
     if (filters.date_to) parts.push(`เบิกถึง ${filters.date_to}`);
+    if (filters.transferred_from) parts.push(`โอนตั้งแต่ ${filters.transferred_from}`);
+    if (filters.transferred_to) parts.push(`โอนถึง ${filters.transferred_to}`);
+    if (filters.amount_min) parts.push(`ยอดตั้งแต่ ${formatMoney(Number(filters.amount_min))}`);
+    if (filters.amount_max) parts.push(`ยอดถึง ${formatMoney(Number(filters.amount_max))}`);
     return parts.join(" · ");
   }, [filters, typeOptions, companyOptions, payeeOptions, returnStatusOptions]);
 
@@ -302,6 +357,58 @@ export default function AssetTable() {
               onChange={(e) => updateFilter("date_to", e.target.value)}
             />
           </div>
+
+          <div className="space-y-1">
+            <Label className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+              วันที่โอน ตั้งแต่
+            </Label>
+            <Input
+              type="date"
+              value={filters.transferred_from}
+              onChange={(e) => updateFilter("transferred_from", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+              วันที่โอน ถึง
+            </Label>
+            <Input
+              type="date"
+              value={filters.transferred_to}
+              onChange={(e) => updateFilter("transferred_to", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+              ยอดเงิน ตั้งแต่ (บาท)
+            </Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={filters.amount_min}
+              onChange={(e) => updateFilter("amount_min", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+              ยอดเงิน ถึง (บาท)
+            </Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              placeholder="ไม่จำกัด"
+              value={filters.amount_max}
+              onChange={(e) => updateFilter("amount_max", e.target.value)}
+            />
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
@@ -406,12 +513,24 @@ export default function AssetTable() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" asChild>
-                      <a href={`/edit/${row.asset_id}`}>
-                        <Pencil className="h-3.5 w-3.5" />
-                        แก้ไข
-                      </a>
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="sm" asChild>
+                        <a href={`/edit/${row.asset_id}`}>
+                          <Pencil className="h-3.5 w-3.5" />
+                          แก้ไข
+                        </a>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteTarget(row)}
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        aria-label={`ลบ ${row.asset_no}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        ลบ
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -430,6 +549,27 @@ export default function AssetTable() {
           </Table>
         </Card>
       )}
+
+      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ยืนยันการลบ</DialogTitle>
+            <DialogDescription>
+              ต้องการลบรายการ &quot;{deleteTarget?.asset_no}&quot;
+              {deleteTarget?.activity_name ? ` (${deleteTarget.activity_name})` : ""} ใช่หรือไม่?
+              การลบไม่สามารถย้อนกลับได้
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              ยกเลิก
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "กำลังลบ..." : "ลบรายการ"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
