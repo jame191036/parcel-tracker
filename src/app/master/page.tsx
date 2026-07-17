@@ -16,17 +16,17 @@ export default function MasterDataPage() {
 
   return (
     <main>
-      <h2 className="mb-6 font-display text-lg font-medium text-ink">จัดการข้อมูลหลัก</h2>
+      <h2 className="mb-6 font-display text-lg font-medium text-foreground">จัดการข้อมูลหลัก</h2>
 
-      <div className="mb-6 flex gap-2 border-b border-line">
+      <div className="mb-6 flex gap-2 border-b border-border">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActive(tab.key)}
             className={`px-4 py-2 text-sm font-medium ${
               active === tab.key
-                ? "border-b-2 border-brand text-brand"
-                : "text-ink/50 hover:text-ink"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {tab.label}

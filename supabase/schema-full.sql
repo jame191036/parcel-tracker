@@ -114,11 +114,10 @@ values ('เข้ากองกลาง'), ('จ่ายบริษัท')
 
 -- ==========================================================
 -- Row Level Security
--- MVP: เปิดให้ทุกคนที่มี anon key อ่าน/เขียนได้ทุกตาราง (ไม่ต้อง login)
--- ⚠️ คำเตือน: เหมาะกับใช้งานภายในทีมที่ไว้ใจกัน หรือ deploy หลัง VPN/intranet
---    เท่านั้น ไม่ควรเปิดสู่อินเทอร์เน็ตสาธารณะ เพราะเป็นข้อมูลการเงิน
---    ถ้าต้องการความปลอดภัยขึ้น ให้เพิ่มหน้า login แล้วเปลี่ยนกลับเป็น
---    using (auth.role() = 'authenticated')
+-- ค่าตั้งต้น: เฉพาะผู้ที่ล็อกอินแล้ว (authenticated) อ่าน/เขียนได้
+--    ต้องเปิดใช้ Supabase Auth (Email) + สร้าง user ก่อนใช้งาน
+--    (แอปมีหน้า /login + middleware คุมสิทธิ์ให้แล้ว)
+-- ถ้าอยากเปิด public ไม่ต้อง login (ใช้ภายใน/หลัง VPN): รัน supabase/open-rls-policy.sql
 -- ==========================================================
 alter table asset enable row level security;
 alter table asset_type enable row level security;
@@ -126,13 +125,13 @@ alter table company enable row level security;
 alter table payee enable row level security;
 alter table return_status enable row level security;
 
-create policy "public read/write asset" on asset
-  for all using (true) with check (true);
-create policy "public read/write asset_type" on asset_type
-  for all using (true) with check (true);
-create policy "public read/write company" on company
-  for all using (true) with check (true);
-create policy "public read/write payee" on payee
-  for all using (true) with check (true);
-create policy "public read/write return_status" on return_status
-  for all using (true) with check (true);
+create policy "authenticated read/write asset" on asset
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated read/write asset_type" on asset_type
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated read/write company" on company
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated read/write payee" on payee
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "authenticated read/write return_status" on return_status
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
