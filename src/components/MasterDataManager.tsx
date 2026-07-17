@@ -1,7 +1,30 @@
 "use client";
 
 import { useEffect, useState, FormEvent } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Plus } from "lucide-react";
 
 type MasterRow = {
   [key: string]: string | boolean | null | undefined;
@@ -11,10 +34,6 @@ type MasterRow = {
   create_date: string;
 };
 
-const inputClass =
-  "w-full border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand";
-const labelClass = "mb-1 block font-mono text-xs uppercase tracking-wide text-ink/60";
-
 type Props = {
   tableName: "asset_type" | "company" | "payee" | "return_status";
   idField: string;
@@ -23,7 +42,10 @@ type Props = {
 };
 
 export default function MasterDataManager({ tableName, idField, nameField, nameLabel }: Props) {
-  const supabase = createClient();
+  // component นี้ทำงานกับ 4 master table แบบ generic (tableName + ชื่อคอลัมน์เป็น dynamic)
+  // type generic ของ supabase-js ตรวจ union ของหลายตารางไม่ได้ จึงใช้ client แบบไม่ผูก schema
+  // เฉพาะที่นี่ — runtime เหมือนเดิมทุกอย่าง แค่ปิด type-check ของ query dynamic
+  const supabase = createClient() as unknown as SupabaseClient;
 
   const [rows, setRows] = useState<MasterRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +59,9 @@ export default function MasterDataManager({ tableName, idField, nameField, nameL
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<MasterRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function loadRows() {
     setLoading(true);
@@ -131,150 +156,172 @@ export default function MasterDataManager({ tableName, idField, nameField, nameL
     loadRows();
   }
 
-  async function softDelete(row: MasterRow) {
-    if (
-      !window.confirm(
-        `ยืนยันลบ "${row[nameField]}" ใช่หรือไม่? รายการที่เคยอ้างอิงอยู่แล้วจะไม่ถูกกระทบ แต่จะไม่แสดงในลิสต์นี้อีก`
-      )
-    ) {
-      return;
-    }
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
     setError(null);
     const { error } = await supabase
       .from(tableName)
       .update({ is_delete: true })
-      .eq(idField, row[idField] as string);
+      .eq(idField, deleteTarget[idField] as string);
+
+    setDeleting(false);
 
     if (error) {
+      setDeleteTarget(null);
       setError(error.message);
       return;
     }
+    setDeleteTarget(null);
     loadRows();
   }
 
   return (
     <div>
-      <form onSubmit={handleAdd} className="mb-6 flex flex-wrap items-end gap-3 border border-line bg-white p-4">
-        <div className="flex-1 min-w-[180px]">
-          <label className={labelClass}>{nameLabel} *</label>
-          <input
-            required
-            className={inputClass}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-        </div>
-        <div className="flex-1 min-w-[220px]">
-          <label className={labelClass}>คำอธิบาย</label>
-          <input
-            className={inputClass}
-            value={newDescription}
-            onChange={(e) => setNewDescription(e.target.value)}
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={adding}
-          className="bg-brand px-5 py-2 text-sm font-medium text-white hover:bg-brand/90 disabled:opacity-50"
-        >
-          {adding ? "กำลังเพิ่ม..." : "+ เพิ่ม"}
-        </button>
-      </form>
+      <Card className="mb-6 p-4">
+        <form onSubmit={handleAdd} className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[180px] flex-1 space-y-1">
+            <Label className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+              {nameLabel} *
+            </Label>
+            <Input required value={newName} onChange={(e) => setNewName(e.target.value)} />
+          </div>
+          <div className="min-w-[220px] flex-1 space-y-1">
+            <Label className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+              คำอธิบาย
+            </Label>
+            <Input value={newDescription} onChange={(e) => setNewDescription(e.target.value)} />
+          </div>
+          <Button type="submit" disabled={adding}>
+            <Plus className="h-4 w-4" />
+            {adding ? "กำลังเพิ่ม..." : "เพิ่ม"}
+          </Button>
+        </form>
+      </Card>
 
       {error && (
-        <p className="mb-4 border border-warn/30 bg-warn/5 px-3 py-2 font-mono text-xs text-warn">
+        <p className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
           เกิดข้อผิดพลาด: {error}
         </p>
       )}
 
       {loading ? (
-        <p className="font-mono text-sm text-ink/50">กำลังโหลด...</p>
+        <p className="font-mono text-sm text-muted-foreground">กำลังโหลด...</p>
       ) : rows.length === 0 ? (
-        <p className="border border-dashed border-line p-8 text-center text-ink/50">ยังไม่มีข้อมูล</p>
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-muted-foreground">
+          ยังไม่มีข้อมูล
+        </p>
       ) : (
-        <div className="overflow-x-auto border border-line">
-          <table className="w-full min-w-[600px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-line bg-brandSoft/60 text-left font-mono text-xs uppercase tracking-wide text-ink/60">
-                <th className="px-4 py-3">{nameLabel}</th>
-                <th className="px-4 py-3">คำอธิบาย</th>
-                <th className="px-4 py-3">สถานะ</th>
-                <th className="px-4 py-3">จัดการ</th>
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="overflow-hidden p-0">
+          <Table className="min-w-[600px]">
+            <TableHeader>
+              <TableRow className="bg-secondary/60 hover:bg-secondary/60">
+                <TableHead>{nameLabel}</TableHead>
+                <TableHead>คำอธิบาย</TableHead>
+                <TableHead>สถานะ</TableHead>
+                <TableHead className="text-right">จัดการ</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((row) => {
                 const id = row[idField] as string;
                 const isEditing = editingId === id;
                 return (
-                  <tr key={id} className="border-b border-line/60 last:border-0 hover:bg-brandSoft/30">
+                  <TableRow key={id}>
                     {isEditing ? (
                       <>
-                        <td className="px-4 py-2">
-                          <input
-                            className={inputClass}
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                          />
-                        </td>
-                        <td className="px-4 py-2">
-                          <input
-                            className={inputClass}
+                        <TableCell>
+                          <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                        </TableCell>
+                        <TableCell>
+                          <Input
                             value={editDescription}
                             onChange={(e) => setEditDescription(e.target.value)}
                           />
-                        </td>
-                        <td className="px-4 py-2 text-ink/50">
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
                           {row.is_active ? "ใช้งาน" : "ปิดใช้งาน"}
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="flex gap-3 font-mono text-xs">
-                            <button
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              size="sm"
                               onClick={() => saveEdit(id)}
                               disabled={savingEdit}
-                              className="text-brand hover:underline disabled:opacity-50"
                             >
                               บันทึก
-                            </button>
-                            <button onClick={cancelEdit} className="text-ink/60 hover:text-ink">
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={cancelEdit}>
                               ยกเลิก
-                            </button>
+                            </Button>
                           </div>
-                        </td>
+                        </TableCell>
                       </>
                     ) : (
                       <>
-                        <td className="px-4 py-3">{row[nameField] as string}</td>
-                        <td className="px-4 py-3 text-ink/70">{row.description || "—"}</td>
-                        <td className="px-4 py-3">
+                        <TableCell className="font-medium">{row[nameField] as string}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {row.description || "—"}
+                        </TableCell>
+                        <TableCell>
                           {row.is_active ? (
-                            <span className="text-brand">ใช้งาน</span>
+                            <Badge variant="success">ใช้งาน</Badge>
                           ) : (
-                            <span className="text-ink/40">ปิดใช้งาน</span>
+                            <Badge variant="secondary">ปิดใช้งาน</Badge>
                           )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-3 font-mono text-xs">
-                            <button onClick={() => startEdit(row)} className="text-brand hover:underline">
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => startEdit(row)}>
                               แก้ไข
-                            </button>
-                            <button onClick={() => toggleActive(row)} className="text-ink/60 hover:text-ink">
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => toggleActive(row)}
+                              className="text-muted-foreground"
+                            >
                               {row.is_active ? "ปิดใช้งาน" : "เปิดใช้งาน"}
-                            </button>
-                            <button onClick={() => softDelete(row)} className="text-warn hover:underline">
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setDeleteTarget(row)}
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            >
                               ลบ
-                            </button>
+                            </Button>
                           </div>
-                        </td>
+                        </TableCell>
                       </>
                     )}
-                  </tr>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       )}
+
+      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ยืนยันการลบ</DialogTitle>
+            <DialogDescription>
+              ต้องการลบ &quot;{deleteTarget ? (deleteTarget[nameField] as string) : ""}&quot;
+              ใช่หรือไม่? รายการที่เคยอ้างอิงอยู่แล้วจะไม่ถูกกระทบ แต่จะไม่แสดงในลิสต์นี้อีก
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              ยกเลิก
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "กำลังลบ..." : "ลบ"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -4,9 +4,61 @@
 
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-body {
-  background-color: #FAFAF8;
-  color: #1F2933;
+/* --- shadcn semantic tokens: theme สีฟ้า + รองรับ dark mode (.dark) --- */
+@layer base {
+  :root {
+    --background: 210 40% 98%;       /* ขาวอมฟ้าอ่อน */
+    --foreground: 222 47% 11%;       /* slate-900 */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 83% 53%;          /* blue-600 #2563EB */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 214 95% 93%;        /* blue-100 #DBEAFE */
+    --secondary-foreground: 221 83% 43%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%; /* slate-500 */
+    --accent: 214 95% 93%;           /* blue-100 (hover) */
+    --accent-foreground: 221 83% 43%;
+    --destructive: 22 71% 41%;       /* warn #B3541E */
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;           /* slate-200 */
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;             /* blue */
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222 47% 11%;        /* slate-900 */
+    --foreground: 210 40% 98%;
+    --card: 217 33% 17%;             /* slate-800 */
+    --card-foreground: 210 40% 98%;
+    --popover: 217 33% 17%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;          /* blue-500 #3B82F6 (สว่างขึ้นให้เด่นบนพื้นมืด) */
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 22%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 20%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 24%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 20 80% 55%;       /* warn สว่างขึ้นสำหรับ dark */
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 24%;
+    --input: 217 33% 24%;
+    --ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }
 
 .tabular-num {

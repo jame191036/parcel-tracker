@@ -1,15 +1,34 @@
 "use client";
 
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useState, FormEvent, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { AssetType, Company, Payee, ReturnStatus, Asset } from "@/lib/database.types";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Trash2 } from "lucide-react";
 
 type Option = { id: string; name: string };
 
-const inputClass =
-  "w-full border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand";
-const labelClass = "mb-1 block font-mono text-xs uppercase tracking-wide text-ink/60";
+const NONE = "__none__";
 
 const emptyForm = {
   asset_no: "",
@@ -24,6 +43,26 @@ const emptyForm = {
   disbursement_date: "",
   transferred_date: "",
 };
+
+// field ที่ label อยู่บนสุดแล้วตามด้วย control — ใช้ซ้ำทั้งฟอร์ม
+function Field({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={className}>
+      <Label className="mb-1 block font-mono text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
+}
 
 export default function AssetForm({ assetId }: { assetId?: string }) {
   const router = useRouter();
@@ -40,6 +79,7 @@ export default function AssetForm({ assetId }: { assetId?: string }) {
 
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -67,7 +107,7 @@ export default function AssetForm({ assetId }: { assetId?: string }) {
       const { data, error } = await supabase
         .from("asset")
         .select("*")
-        .eq("asset_id", assetId)
+        .eq("asset_id", assetId!) // guard `if (!assetId) return` ด้านบนการันตีว่าไม่ undefined
         .single();
 
       if (error) {
@@ -120,7 +160,7 @@ export default function AssetForm({ assetId }: { assetId?: string }) {
     };
 
     const { error } = isEdit
-      ? await supabase.from("asset").update(payload).eq("asset_id", assetId)
+      ? await supabase.from("asset").update(payload).eq("asset_id", assetId!) // isEdit ⇒ assetId มีค่า
       : await supabase.from("asset").insert(payload);
 
     setSubmitting(false);
@@ -135,9 +175,6 @@ export default function AssetForm({ assetId }: { assetId?: string }) {
 
   async function handleDelete() {
     if (!assetId) return;
-    if (!window.confirm(`ยืนยันลบรายการ "${form.asset_no}" ใช่หรือไม่? การลบไม่สามารถย้อนกลับได้`)) {
-      return;
-    }
     setDeleting(true);
     setError(null);
 
@@ -146,6 +183,7 @@ export default function AssetForm({ assetId }: { assetId?: string }) {
     setDeleting(false);
 
     if (error) {
+      setConfirmOpen(false);
       setError(error.message);
       return;
     }
@@ -154,178 +192,159 @@ export default function AssetForm({ assetId }: { assetId?: string }) {
   }
 
   if (loadingRecord) {
-    return <p className="font-mono text-sm text-ink/50">กำลังโหลดข้อมูล...</p>;
+    return <p className="font-mono text-sm text-muted-foreground">กำลังโหลดข้อมูล...</p>;
   }
 
+  // dropdown แบบ optional: ค่าว่าง = ไม่ระบุ (Radix ใช้ค่าว่างไม่ได้ → placeholder + sentinel)
+  const optionalSelect = (
+    key: "asset_type_id" | "company_id" | "payee_id" | "return_status_id",
+    options: Option[],
+    placeholder = "— เลือก —"
+  ) => (
+    <Select
+      value={form[key] || undefined}
+      onValueChange={(v) => update(key, v === NONE ? "" : v)}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={NONE}>— ไม่ระบุ —</SelectItem>
+        {options.map((o) => (
+          <SelectItem key={o.id} value={o.id}>
+            {o.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
   return (
-    <form onSubmit={handleSubmit} className="max-w-2xl border border-line bg-white p-6">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className={labelClass}>เลขพัสดุ *</label>
-          <input
-            required
-            className={inputClass}
-            value={form.asset_no}
-            onChange={(e) => update("asset_no", e.target.value)}
-          />
-        </div>
-        <div>
-          <label className={labelClass}>เลขที่ฎีกา</label>
-          <input
-            className={inputClass}
-            value={form.supreme_court_no}
-            onChange={(e) => update("supreme_court_no", e.target.value)}
-          />
+    <Card className="max-w-2xl p-6">
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="เลขพัสดุ *">
+            <Input
+              required
+              value={form.asset_no}
+              onChange={(e) => update("asset_no", e.target.value)}
+            />
+          </Field>
+          <Field label="เลขที่ฎีกา">
+            <Input
+              value={form.supreme_court_no}
+              onChange={(e) => update("supreme_court_no", e.target.value)}
+            />
+          </Field>
+
+          <Field label="ชื่อโครงการ *" className="col-span-2">
+            <Input
+              required
+              value={form.activity_name}
+              onChange={(e) => update("activity_name", e.target.value)}
+            />
+          </Field>
+
+          <Field label="คำอธิบายเพิ่มเติม" className="col-span-2">
+            <Textarea
+              rows={2}
+              value={form.description}
+              onChange={(e) => update("description", e.target.value)}
+            />
+          </Field>
+
+          <Field label="ประเภทพัสดุ">{optionalSelect("asset_type_id", assetTypes)}</Field>
+
+          <Field label="ยอดเงิน (บาท) *">
+            <Input
+              required
+              type="number"
+              step="0.01"
+              value={form.total_amount}
+              onChange={(e) => update("total_amount", e.target.value)}
+            />
+          </Field>
+
+          <Field label="บริษัททำเบิกจ่าย">{optionalSelect("company_id", companies)}</Field>
+          <Field label="เบิกเงินให้ใคร">{optionalSelect("payee_id", payees)}</Field>
+          <Field label="สถานะการคืนเงิน">{optionalSelect("return_status_id", returnStatuses)}</Field>
+
+          <Field label="วันที่เบิกจ่าย">
+            <Input
+              type="date"
+              value={form.disbursement_date}
+              onChange={(e) => update("disbursement_date", e.target.value)}
+            />
+          </Field>
+          <Field label="วันที่เงินโอนเข้า">
+            <Input
+              type="date"
+              value={form.transferred_date}
+              onChange={(e) => update("transferred_date", e.target.value)}
+            />
+          </Field>
         </div>
 
-        <div className="col-span-2">
-          <label className={labelClass}>ชื่อโครงการ *</label>
-          <input
-            required
-            className={inputClass}
-            value={form.activity_name}
-            onChange={(e) => update("activity_name", e.target.value)}
-          />
-        </div>
+        {error && (
+          <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
+            {isEdit ? "บันทึกการแก้ไขไม่สำเร็จ" : "บันทึกไม่สำเร็จ"}: {error}
+          </p>
+        )}
 
-        <div className="col-span-2">
-          <label className={labelClass}>คำอธิบายเพิ่มเติม</label>
-          <textarea
-            className={inputClass}
-            rows={2}
-            value={form.description}
-            onChange={(e) => update("description", e.target.value)}
-          />
+        <div className="mt-6 flex items-center justify-between">
+          <div>
+            {isEdit && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setConfirmOpen(true)}
+                disabled={deleting || submitting}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+                ลบรายการนี้
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <Button type="button" variant="ghost" asChild>
+              <a href="/">ยกเลิก</a>
+            </Button>
+            <Button type="submit" disabled={submitting || deleting}>
+              {submitting ? "กำลังบันทึก..." : isEdit ? "บันทึกการแก้ไข" : "บันทึกรายการ"}
+            </Button>
+          </div>
         </div>
+      </form>
 
-        <div>
-          <label className={labelClass}>ประเภทพัสดุ</label>
-          <select
-            className={inputClass}
-            value={form.asset_type_id}
-            onChange={(e) => update("asset_type_id", e.target.value)}
-          >
-            <option value="">— เลือก —</option>
-            {assetTypes.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className={labelClass}>ยอดเงิน (บาท) *</label>
-          <input
-            required
-            type="number"
-            step="0.01"
-            className={inputClass}
-            value={form.total_amount}
-            onChange={(e) => update("total_amount", e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label className={labelClass}>บริษัททำเบิกจ่าย</label>
-          <select
-            className={inputClass}
-            value={form.company_id}
-            onChange={(e) => update("company_id", e.target.value)}
-          >
-            <option value="">— เลือก —</option>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className={labelClass}>เบิกเงินให้ใคร</label>
-          <select
-            className={inputClass}
-            value={form.payee_id}
-            onChange={(e) => update("payee_id", e.target.value)}
-          >
-            <option value="">— เลือก —</option>
-            {payees.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className={labelClass}>สถานะการคืนเงิน</label>
-          <select
-            className={inputClass}
-            value={form.return_status_id}
-            onChange={(e) => update("return_status_id", e.target.value)}
-          >
-            <option value="">— เลือก —</option>
-            {returnStatuses.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className={labelClass}>วันที่เบิกจ่าย</label>
-          <input
-            type="date"
-            className={inputClass}
-            value={form.disbursement_date}
-            onChange={(e) => update("disbursement_date", e.target.value)}
-          />
-        </div>
-        <div>
-          <label className={labelClass}>วันที่เงินโอนเข้า</label>
-          <input
-            type="date"
-            className={inputClass}
-            value={form.transferred_date}
-            onChange={(e) => update("transferred_date", e.target.value)}
-          />
-        </div>
-      </div>
-
-      {error && (
-        <p className="mt-4 border border-warn/30 bg-warn/5 px-3 py-2 font-mono text-xs text-warn">
-          {isEdit ? "บันทึกการแก้ไขไม่สำเร็จ" : "บันทึกไม่สำเร็จ"}: {error}
-        </p>
-      )}
-
-      <div className="mt-6 flex items-center justify-between">
-        <div>
-          {isEdit && (
-            <button
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ยืนยันการลบ</DialogTitle>
+            <DialogDescription>
+              ต้องการลบรายการ &quot;{form.asset_no}&quot; ใช่หรือไม่? การลบไม่สามารถย้อนกลับได้
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
               type="button"
-              onClick={handleDelete}
-              disabled={deleting || submitting}
-              className="px-4 py-2 text-sm text-warn hover:underline disabled:opacity-50"
+              variant="ghost"
+              onClick={() => setConfirmOpen(false)}
+              disabled={deleting}
             >
-              {deleting ? "กำลังลบ..." : "ลบรายการนี้"}
-            </button>
-          )}
-        </div>
-        <div className="flex gap-3">
-          <a href="/" className="px-4 py-2 text-sm text-ink/60 hover:text-ink">
-            ยกเลิก
-          </a>
-          <button
-            type="submit"
-            disabled={submitting || deleting}
-            className="bg-brand px-5 py-2 text-sm font-medium text-white hover:bg-brand/90 disabled:opacity-50"
-          >
-            {submitting ? "กำลังบันทึก..." : isEdit ? "บันทึกการแก้ไข" : "บันทึกรายการ"}
-          </button>
-        </div>
-      </div>
-    </form>
+              ยกเลิก
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "กำลังลบ..." : "ลบรายการ"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }

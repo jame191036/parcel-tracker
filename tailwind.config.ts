@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: ["class"],
   content: [
     "./src/app/**/*.{ts,tsx}",
     "./src/components/**/*.{ts,tsx}",
@@ -8,20 +9,74 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#1F2933",
-        paper: "#FAFAF8",
-        line: "#E4E1D8",
-        brand: "#2B5D5A",
-        brandSoft: "#E6EDEC",
+        // --- โทนแบรนด์ (สีฟ้า) — ส่วนใหญ่ย้ายไปใช้ semantic token แล้ว เหลือไว้เผื่อคลาสเก่า ---
+        ink: "#0F172A",
+        paper: "#F8FAFC",
+        line: "#E2E8F0",
+        brand: "#2563EB",
+        brandSoft: "#DBEAFE",
         warn: "#B3541E",
+        // --- token เชิงความหมายของ shadcn (ผูกกับ CSS variables ใน globals.css) ---
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+      },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
         display: ["'IBM Plex Sans Thai'", "sans-serif"],
         body: ["'IBM Plex Sans Thai'", "sans-serif"],
         mono: ["'IBM Plex Mono'", "monospace"],
       },
+      keyframes: {
+        "accordion-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
+      },
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
+      },
     },
   },
-  plugins: [],
+  plugins: [require("tailwindcss-animate")],
 };
 export default config;
